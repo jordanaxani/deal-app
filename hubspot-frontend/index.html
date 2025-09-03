@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shift Collab Deal Tracker</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Plus, DollarSign, Calendar, User, Phone, Mail, ChevronRight, RefreshCw } = lucide;
+
+        const DealTracker = () => {
+          const [deals, setDeals] = useState([]);
+          const [loading, setLoading] = useState(false);
+          const [showAddDeal, setShowAddDeal] = useState(false);
+          const [apiKey, setApiKey] = useState('');
+          const [backendUrl, setBackendUrl] = useState('https://deals-app-rho.vercel.app');
+          const [isConfigured, setIsConfigured] = useState(false);
+
+          // Demo data for when API isn't connected yet
+          const demoDeals = [
+            {
+              id: '1',
+              dealname: 'ABC Corporation - Therapy Services',
+              amount: 45000,
+              dealstage: 'qualifiedtobuy',
+              closedate: '2025-09-15',
+              contact: 'Sarah Johnson',
+              email: 'sarah@abccorp.com',
+              phone: '+1 (555) 123-4567',
+              companies: [{ name: 'ABC Corporation' }]
+            },
+            {
+              id: '2',
+              dealname: 'XYZ University - Student Support',
+              amount: 28000,
+              dealstage: 'presentationscheduled',
+              closedate: '2025-09-28',
+              contact: 'Dr. Michael Chen',
+              email: 'mchen@xyzuni.edu',
+              phone: '+1 (555) 987-6543',
+              companies: [{ name: 'XYZ University' }]
+            },
+            {
+              id: '3',
+              dealname: 'TechStart Inc - Employee Wellness',
+              amount: 18500,
+              dealstage: 'appointmentscheduled',
+              closedate: '2025-10-05',
+              contact: 'Jennifer Lee',
+              email: 'jen.lee@techstart.com',
+              phone: '+1 (555) 456-7890',
+              companies: [{ name: 'TechStart Inc' }]
+            }
+          ];
+
+          const dealStages = [
+            { id: 'appointmentscheduled', name: 'Appointment Scheduled', color: 'bg-blue-100 text-blue-800' },
+            { id: 'qualifiedtobuy', name: 'Qualified to Buy', color: 'bg-yellow-100 text-yellow-800' },
+            { id: 'presentationscheduled', name: 'Presentation Scheduled', color: 'bg-orange-100 text-orange-800' },
+            { id: 'decisionmakerboughtin', name: 'Decision Maker Bought-In', color: 'bg-purple-100 text-purple-800' },
+            { id: 'contractsent', name: 'Contract Sent', color: 'bg-indigo-100 text-indigo-800' },
+            { id: 'closedwon', name: 'Closed Won', color: 'bg-green-100 text-green-800' },
+            { id: 'closedlost', name: 'Closed Lost', color: 'bg-red-100 text-red-800' }
+          ];
+
+          const [newDeal, setNewDeal] = useState({
+            dealname: '',
+            amount: '',
+            dealstage: 'appointmentscheduled',
+            closedate: '',
+            contact: '',
+            email: '',
+            phone: '',
+            company: ''
+          });
+
+          useEffect(() => {
+            setDeals(demoDeals);
+          }, []);
+
+          const fetchDeals = async () => {
+            console.log('fetchDeals called with:', { apiKey: apiKey ? 'present' : 'missing', backendUrl });
+            
+            if (!apiKey || !backendUrl) {
+              console.log('Missing credentials, using demo data');
+              setDeals(demoDeals);
+              alert('Please fill in both Backend URL and HubSpot Access Token fields');
+              return;
+            }
+
+            setLoading(true);
+            console.log('Making request to:', `${backendUrl}/api/deals`);
+            
+            try {
+              const response = await fetch(`${backendUrl}/api/deals`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              console.log('Backend Response Status:', response.status);
+              
+              if (response.ok) {
+                const data = await response.json();
+                console.log('Backend Response Data:', data);
+                
+                setDeals(data.results || []);
+                setIsConfigured(true);
+                alert(`Success! Loaded ${data.results?.length || 0} deals from HubSpot via our backend`);
+              } else {
+                let errorData;
+                try {
+                  errorData = await response.json();
+                } catch {
+                  errorData = { error: await response.text() };
+                }
+                console.error('Backend Error:', response.status, errorData);
+                alert(`Backend Error: ${response.status}\nError: ${errorData.error || 'Unknown error'}\nDetails: ${errorData.details || 'No details'}`);
+                setDeals(demoDeals);
+              }
+            } catch (error) {
+              console.error('Network/Fetch Error:', error);
+              alert(`Connection Error: ${error.message}`);
+              setDeals(demoDeals);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const updateDealStage = async (dealId, newStage) => {
+            if (!apiKey || !backendUrl) {
+              setDeals(deals.map(deal => 
+                deal.id === dealId ? { ...deal, dealstage: newStage } : deal
+              ));
+              return;
+            }
+
+            try {
+              const response = await fetch(`${backendUrl}/api/deals`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  dealId,
+                  dealstage: newStage
+                })
+              });
+
+              if (response.ok) {
+                setDeals(deals.map(deal => 
+                  deal.id === dealId ? { ...deal, dealstage: newStage } : deal
+                ));
+              } else {
+                const errorData = await response.json();
+                alert(`Error updating deal: ${errorData.error}`);
+              }
+            } catch (error) {
+              console.error('Error updating deal:', error);
+              alert(`Error updating deal: ${error.message}`);
+            }
+          };
+
+          const addDeal = async () => {
+            if (!newDeal.dealname || !newDeal.amount) return;
+
+            if (!apiKey || !backendUrl) {
+              const newId = (deals.length + 1).toString();
+              setDeals([...deals, { ...newDeal, id: newId, companies: [{ name: newDeal.company }] }]);
+              setNewDeal({
+                dealname: '',
+                amount: '',
+                dealstage: 'appointmentscheduled',
+                closedate: '',
+                contact: '',
+                email: '',
+                phone: '',
+                company: ''
+              });
+              setShowAddDeal(false);
+              return;
+            }
+
+            try {
+              const response = await fetch(`${backendUrl}/api/deals`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  dealname: newDeal.dealname,
+                  amount: newDeal.amount,
+                  dealstage: newDeal.dealstage,
+                  closedate: newDeal.closedate,
+                })
+              });
+
+              if (response.ok) {
+                await fetchDeals();
+                setNewDeal({
+                  dealname: '',
+                  amount: '',
+                  dealstage: 'appointmentscheduled',
+                  closedate: '',
+                  contact: '',
+                  email: '',
+                  phone: '',
+                  company: ''
+                });
+                setShowAddDeal(false);
+              } else {
+                const errorData = await response.json();
+                alert(`Error adding deal: ${errorData.error}`);
+              }
+            } catch (error) {
+              console.error('Error adding deal:', error);
+              alert(`Error adding deal: ${error.message}`);
+            }
+          };
+
+          const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-CA', {
+              style: 'currency',
+              currency: 'CAD'
+            }).format(amount);
+          };
+
+          const formatDate = (dateString) => {
+            return new Date(dateString).toLocaleDateString('en-CA', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            });
+          };
+
+          const getStageInfo = (stageId) => {
+            return dealStages.find(stage => stage.id === stageId) || dealStages[0];
+          };
+
+          const getNextStage = (currentStage) => {
+            const currentIndex = dealStages.findIndex(stage => stage.id === currentStage);
+            if (currentIndex < dealStages.length - 2) {
+              return dealStages[currentIndex + 1];
+            }
+            return null;
+          };
+
+          const totalPipelineValue = deals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
+          const activeDealCount = deals.filter(deal => !['closedwon', 'closedlost'].includes(deal.dealstage)).length;
+
+          return React.createElement('div', { className: "min-h-screen bg-gray-50 p-4" },
+            React.createElement('div', { className: "max-w-6xl mx-auto" },
+              React.createElement('div', { className: "bg-white rounded-lg shadow-sm p-6 mb-6" },
+                React.createElement('div', { className: "flex justify-between items-center mb-4" },
+                  React.createElement('div', {},
+                    React.createElement('h1', { className: "text-2xl font-bold text-gray-900" }, "Shift Collab Deal Tracker"),
+                    React.createElement('p', { className: "text-gray-600 mt-1" }, "Simple pipeline management for executives")
+                  ),
+                  React.createElement('div', { className: "flex gap-3" },
+                    React.createElement('button', {
+                      onClick: fetchDeals,
+                      disabled: loading,
+                      className: "flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                    },
+                      React.createElement(RefreshCw, { className: `w-4 h-4 ${loading ? 'animate-spin' : ''}` }),
+                      "Refresh"
+                    ),
+                    React.createElement('button', {
+                      onClick: () => setShowAddDeal(true),
+                      className: "flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    },
+                      React.createElement(Plus, { className: "w-4 h-4" }),
+                      "Add Deal"
+                    )
+                  )
+                ),
+                
+                !isConfigured && React.createElement('div', { className: "bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4" },
+                  React.createElement('h3', { className: "font-medium text-yellow-800 mb-2" }, "Connect to HubSpot via Backend"),
+                  React.createElement('p', { className: "text-sm text-yellow-700 mb-3" }, "Enter your HubSpot access token below to connect live data (showing demo data for now)"),
+                  React.createElement('div', { className: "space-y-3" },
+                    React.createElement('div', {},
+                      React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, "Backend URL (your Vercel deployment)"),
+                      React.createElement('input', {
+                        type: "url",
+                        placeholder: "https://your-app.vercel.app",
+                        value: backendUrl,
+                        onChange: (e) => setBackendUrl(e.target.value),
+                        className: "w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      })
+                    ),
+                    React.createElement('div', {},
+                      React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, "HubSpot Access Token"),
+                      React.createElement('div', { className: "flex gap-2" },
+                        React.createElement('input', {
+                          type: "password",
+                          placeholder: "HubSpot Access Token (pat-xxx...)",
+                          value: apiKey,
+                          onChange: (e) => setApiKey(e.target.value),
+                          className: "flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        }),
+                        React.createElement('button', {
+                          onClick: fetchDeals,
+                          disabled: !apiKey || !backendUrl || loading,
+                          className: "px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        }, loading ? 'Testing...' : 'Connect')
+                      )
+                    )
+                  )
+                ),
+
+                React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                  React.createElement('div', { className: "bg-green-50 p-4 rounded-lg" },
+                    React.createElement('div', { className: "flex items-center gap-2" },
+                      React.createElement(DollarSign, { className: "w-5 h-5 text-green-600" }),
+                      React.createElement('span', { className: "text-sm font-medium text-green-800" }, "Total Pipeline Value")
+                    ),
+                    React.createElement('div', { className: "text-2xl font-bold text-green-900 mt-1" }, formatCurrency(totalPipelineValue))
+                  ),
+                  React.createElement('div', { className: "bg-blue-50 p-4 rounded-lg" },
+                    React.createElement('div', { className: "flex items-center gap-2" },
+                      React.createElement(User, { className: "w-5 h-5 text-blue-600" }),
+                      React.createElement('span', { className: "text-sm font-medium text-blue-800" }, "Active Deals")
+                    ),
+                    React.createElement('div', { className: "text-2xl font-bold text-blue-900 mt-1" }, activeDealCount)
+                  )
+                )
+              ),
+
+              React.createElement('div', { className: "space-y-4" },
+                deals.map((deal) => {
+                  const stageInfo = getStageInfo(deal.dealstage);
+                  const nextStage = getNextStage(deal.dealstage);
+                  
+                  return React.createElement('div', { key: deal.id, className: "bg-white rounded-lg shadow-sm border border-gray-200 p-6" },
+                    React.createElement('div', { className: "flex justify-between items-start" },
+                      React.createElement('div', { className: "flex-1" },
+                        React.createElement('div', { className: "flex items-center gap-3 mb-3" },
+                          React.createElement('h3', { className: "text-lg font-semibold text-gray-900" }, deal.dealname || deal.properties?.dealname),
+                          React.createElement('span', { className: `px-3 py-1 rounded-full text-xs font-medium ${stageInfo.color}` }, stageInfo.name)
+                        ),
+                        
+                        React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-4 gap-4 text-sm" },
+                          React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement(DollarSign, { className: "w-4 h-4 text-gray-500" }),
+                            React.createElement('span', { className: "font-medium" }, formatCurrency(deal.amount || deal.properties?.amount || 0))
+                          ),
+                          React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement(Calendar, { className: "w-4 h-4 text-gray-500" }),
+                            React.createElement('span', {}, 
+                              deal.closedate || deal.properties?.closedate ? formatDate(deal.closedate || deal.properties?.closedate) : 'No date set'
+                            )
+                          ),
+                          React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement(User, { className: "w-4 h-4 text-gray-500" }),
+                            React.createElement('span', {}, deal.contact || 'No contact')
+                          ),
+                          React.createElement('div', { className: "flex items-center gap-2" },
+                            React.createElement('span', { className: "text-gray-600" }, 
+                              deal.companies?.[0]?.name || deal.company || 'No company'
+                            )
+                          )
+                        ),
+
+                        (deal.email || deal.phone) && React.createElement('div', { className: "flex gap-4 mt-3 text-sm" },
+                          deal.email && React.createElement('a', {
+                            href: `mailto:${deal.email}`,
+                            className: "flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                          },
+                            React.createElement(Mail, { className: "w-4 h-4" }),
+                            deal.email
+                          ),
+                          deal.phone && React.createElement('a', {
+                            href: `tel:${deal.phone}`,
+                            className: "flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                          },
+                            React.createElement(Phone, { className: "w-4 h-4" }),
+                            deal.phone
+                          )
+                        )
+                      ),
+
+                      nextStage && !['closedwon', 'closedlost'].includes(deal.dealstage) && React.createElement('button', {
+                        onClick: () => updateDealStage(deal.id, nextStage.id),
+                        className: "flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 ml-4"
+                      },
+                        React.createElement('span', { className: "text-sm" }, `Advance to ${nextStage.name}`),
+                        React.createElement(ChevronRight, { className: "w-4 h-4" })
+                      )
+                    )
+                  );
+                })
+              ),
+
+              showAddDeal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" },
+                React.createElement('div', { className: "bg-white rounded-lg shadow-xl p-6 w-full max-w-md" },
+                  React.createElement('h2', { className: "text-lg font-semibold mb-4" }, "Add New Deal"),
+                  
+                  React.createElement('div', { className: "space-y-4" },
+                    React.createElement('div', {},
+                      React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, "Deal Name *"),
+                      React.createElement('input', {
+                        type: "text",
+                        value: newDeal.dealname,
+                        onChange: (e) => setNewDeal({...newDeal, dealname: e.target.value}),
+                        className: "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500",
+                        placeholder: "e.g., ABC Corp - Therapy Services"
+                      })
+                    ),
+                    React.createElement('div', {},
+                      React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, "Deal Value (CAD) *"),
+                      React.createElement('input', {
+                        type: "number",
+                        value: newDeal.amount,
+                        onChange: (e) => setNewDeal({...newDeal, amount: e.target.value}),
+                        className: "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500",
+                        placeholder: "25000"
+                      })
+                    ),
+                    React.createElement('div', {},
+                      React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, "Close Date"),
+                      React.createElement('input', {
+                        type: "date",
+                        value: newDeal.closedate,
+                        onChange: (e) => setNewDeal({...newDeal, closedate: e.target.value}),
+                        className: "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      })
+                    )
+                  ),
+
+                  React.createElement('div', { className: "flex gap-3 mt-6" },
+                    React.createElement('button', {
+                      onClick: () => setShowAddDeal(false),
+                      className: "flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                    }, "Cancel"),
+                    React.createElement('button', {
+                      onClick: addDeal,
+                      disabled: !newDeal.dealname || !newDeal.amount,
+                      className: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    }, "Add Deal")
+                  )
+                )
+              )
+            )
+          );
+        };
+
+        ReactDOM.render(React.createElement(DealTracker), document.getElementById('root'));
+    </script>
+</body>
+</html>
